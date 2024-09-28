@@ -1,0 +1,56 @@
+// This file is part of www.nand2tetris.org
+// and the book "The Elements of Computing Systems"
+// by Nisan and Schocken, MIT Press.
+// File name: projects/5/Memory.hdl
+/**
+ * The complete address space of the Hack computer's memory,
+ * including RAM and memory-mapped I/O. 
+ * The chip facilitates read and write operations, as follows:
+ *     Read:  out(t) = Memory[address(t)](t)
+ *     Write: if load(t-1) then Memory[address(t-1)](t) = in(t-1)
+ * In words: the chip always outputs the value stored at the memory 
+ * location specified by address. If load=1, the in value is loaded 
+ * into the memory location specified by address. This value becomes 
+ * available through the out output from the next time step onward.
+ * Address space rules:
+ * Only the upper 16K+8K+1 words of the Memory chip are used. 
+ * Access to address>0x6000 is invalid and reads 0. Access to any address
+ * in the range 0x4000-0x5FFF results in accessing the screen memory 
+ * map. Access to address 0x6000 results in accessing the keyboard 
+ * memory map. The behavior in these addresses is described in the Screen
+ * and Keyboard chip specifications given in the lectures and the book.
+ */
+CHIP Memory {
+    IN in[16], load, address[15];
+    OUT out[16];
+
+    PARTS:
+
+    // Since RAM16K can only select 14 address bits, we need
+    // a DMux to get the 15th bit (MSB)
+    DMux(in=load, sel=address[14], a=a, b=b);
+
+    // RAM16K needs to access the first 16383 addresses
+	RAM16K(in=in, load=a, address=address[0..13], out=ram1);
+    RAM16K(in=in, load=b, address=address[0..13], out=ram2);
+
+    Mux16(a=ram1, b=ram2, sel=address[14], out=ramOut);
+
+    // Screen accesses addresses from address 16384 through
+    // 24575, but is mapped such that address 16384 looks like
+    // address 0 to Screen. This means it needs the first
+    // 12 LSB plus the MSB of the incoming 15-bit address
+    // The 2nd MSB of the 15-bit address is never used
+    Screen(in=in, load=scr, address[0..12]=address[0..12], out=screenOut);
+
+    // Keyboard accesses only address 24576
+    Keyboard(out=keyOut);
+
+    // Only print to screen if address is within acceptable range
+    // i.e. 10xxxxxxxxxxxxxx. 1st MSB must be 1 and 2nd MSB must 
+    // be 0 to be between 16384 - 24575.
+    DMux4Way(in=true, sel=address[13..14], c=scr);
+
+    // Return the correct value based on 1st and 2nd MSB
+    Mux4Way16(a=ramOut, b=ramOut, c=screenOut, d=keyOut, sel=address[13..14], out=out);
+}
